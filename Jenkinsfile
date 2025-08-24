@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'ubuntu:22.04'
-            args '-u root'   // run as root to install packages
+            args '-u root'
         }
     }
     stages {
