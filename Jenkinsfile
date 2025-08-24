@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/balalingam007/sql-demo.git'
+                git branch: 'main', url: 'https://github.com/balalingam007/sql-demo'
             }
         }
         stage('Build Artifact') {
@@ -13,7 +13,7 @@ pipeline {
                     sh 'zip -r sql-demo.zip artifact/'
                 }
             }
-        }
+        }	
         stage('Publish Artifact') {
             steps {
                 archiveArtifacts artifacts: 'sql-demo.zip', fingerprint: true
