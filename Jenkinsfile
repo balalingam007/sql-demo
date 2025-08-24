@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'ubuntu:22.04'
-            args '-u root'
-        }
-    }
+    agent any
     stages {
         stage('Install Tools') {
             steps {
