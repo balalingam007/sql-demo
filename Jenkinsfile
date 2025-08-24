@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/balalingam007/sql-demo'
+                git branch: 'main', url: 'https://github.com/balalingam007/sql-demo.git'
             }
         }
         stage('Build Artifact') {
