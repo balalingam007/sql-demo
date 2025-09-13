@@ -2,81 +2,80 @@ pipeline {
     agent any
 
     environment {
-        ARTIFACTORY_URL = "http://artifactory:8081/artifactory/generic-local"
+        ARTIFACT_URL = "http://artifactory:8081/artifactory/generic-local/sql-demo/artifact.zip"
+        GIT_REPO     = "https://github.com/balalingam007/sql-demo.git"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: "${env.BRANCH_NAME}", url: 'https://github.com/balalingam007/sql-demo.git'
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
-        stage('Build & Package') {
+        stage('Build') {
             steps {
                 sh 'zip -r artifact.zip *.sql'
             }
-        }
-
-        stage('Publish to Artifactory') {
-            steps {
-                script {
-                    def artifactName = "artifact-${env.BUILD_NUMBER}.zip"
-                    sh """
-                      curl -u admin:password -T artifact.zip ${ARTIFACTORY_URL}/${artifactName}
-                    """
-                    env.ARTIFACT_URL = "${ARTIFACTORY_URL}/${artifactName}"
+            post {
+                success {
+                    archiveArtifacts artifacts: 'artifact.zip', fingerprint: true
                 }
             }
         }
 
-        stage('Deploy with Ansible') {
+        stage('SonarQube Analysis') {
             steps {
-                script {
-                    if (env.BRANCH_NAME.startsWith("feature/")) {
-                        echo "Deploying feature branch to DEV..."
-                        sh """
-                          docker exec ansible-control ansible-playbook \
-                          -i /ansible/inventory /ansible/deploy.yml \
-                          -e target_env=dev -e artifact_url=${env.ARTIFACT_URL}
-                        """
-                    } else if (env.BRANCH_NAME.startsWith("release/") || env.BRANCH_NAME == "main") {
-                        echo "Deploying release branch to STAGING..."
-                        sh """
-                          docker exec ansible-control ansible-playbook \
-                          -i /ansible/inventory /ansible/deploy.yml \
-                          -e target_env=staging -e artifact_url=${env.ARTIFACT_URL}
-                        """
-                    }
+                withSonarQubeEnv('SonarQube') {
+                    sh 'sonar-scanner -Dsonar.projectKey=sql-demo -Dsonar.sources=.'
                 }
             }
         }
 
-        stage('Approval for Production') {
-            when {
-                expression { env.BRANCH_NAME == "main" }
-            }
+        stage('Publish Artifact') {
             steps {
-                script {
-                    timeout(time: 10, unit: 'MINUTES') {
-                        input message: "Deploy to PRODUCTION?", ok: "Approve"
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to Production') {
-            when {
-                expression { env.BRANCH_NAME == "main" }
-            }
-            steps {
-                echo "Deploying to PRODUCTION..."
                 sh """
-                  docker exec ansible-control ansible-playbook \
-                  -i /ansible/inventory /ansible/deploy.yml \
-                  -e target_env=prod -e artifact_url=${env.ARTIFACT_URL}
+                  curl -u admin:password -T artifact.zip \
+                  http://artifactory:8081/artifactory/generic-local/sql-demo/artifact.zip
                 """
             }
+        }
+
+        stage('Deploy to Dev') {
+            steps {
+                sh """
+                  ansible-playbook -i /ansible/inventory /ansible/deploy.yml \
+                  -e artifact_url=${ARTIFACT_URL} \
+                  -e target_env=dev
+                """
+            }
+        }
+
+        stage('Approval for Prod') {
+            steps {
+                script {
+                    input message: "Approve deployment to PROD?", ok: "Deploy"
+                }
+            }
+        }
+
+        stage('Deploy to Prod') {
+            steps {
+                sh """
+                  ansible-playbook -i /ansible/inventory /ansible/deploy.yml \
+                  -e artifact_url=${ARTIFACT_URL} \
+                  -e target_env=prod
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline completed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed. Please check logs."
         }
     }
 }
