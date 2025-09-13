@@ -35,7 +35,7 @@ pipeline {
         stage('Publish Artifact') {
             steps {
                 sh """
-                  curl -u admin:password -T artifact.zip \
+                  curl -u admin:Fo0tb4ll! -T artifact.zip \
                   http://artifactory:8081/artifactory/generic-local/sql-demo/artifact.zip
                 """
             }
