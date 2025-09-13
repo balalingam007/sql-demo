@@ -26,11 +26,22 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh 'sonar-scanner -Dsonar.projectKey=sql-demo -Dsonar.sources=.'
-                }
+        withSonarQubeEnv('sonarqube') {
+            script {
+                // Use the scanner installed via Jenkins "Global Tool Configuration"
+                def scannerHome = tool 'SonarQubeScanner'
+                sh """
+                  ${scannerHome}/bin/sonar-scanner \
+                  -Dsonar.projectKey=sql-demo \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=${env.SONAR_HOST_URL} \
+                  -Dsonar.login=${env.SONAR_AUTH_TOKEN}
+                """
             }
         }
+    }
+}
+
 
         stage('Publish Artifact') {
             steps {
