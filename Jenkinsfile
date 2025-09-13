@@ -26,7 +26,7 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('sonarqube') {
                     sh 'sonar-scanner -Dsonar.projectKey=sql-demo -Dsonar.sources=.'
                 }
             }
