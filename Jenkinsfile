@@ -2,49 +2,62 @@ pipeline {
     agent any
 
     environment {
-        ARTIFACT_NAME = "artifact.zip"
-        ARTIFACT_VERSION = "${env.BUILD_NUMBER}"
-        ARTIFACT_URL = "http://artifactory:8081/artifactory/sql-demo/${env.BUILD_NUMBER}/${ARTIFACT_NAME}"
+        SONARQUBE = 'SonarQube'  // Jenkins SonarQube server config name
+        ARTIFACTORY = 'Artifactory' // Jenkins Artifactory config name
+        REPO = 'sql-demo'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: "${env.BRANCH_NAME}", url: 'https://github.com/balalingam007/sql-demo.git'
+                git branch: env.BRANCH_NAME, url: 'https://github.com/balalingam007/sql-demo.git'
             }
         }
 
         stage('Build & Package') {
             steps {
-                sh 'zip -r ${ARTIFACT_NAME} src/*.js'
+                sh '''
+                mkdir -p build
+                zip -r build/artifact.zip *.sql
+                '''
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'build/artifact.zip', fingerprint: true
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('MySonarQube') {
-                    sh 'sonar-scanner -Dsonar.projectKey=sql-demo -Dsonar.sources=src'
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                    sonar-scanner \
+                        -Dsonar.projectKey=${REPO} \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.login=$SONAR_AUTH_TOKEN
+                    '''
                 }
             }
         }
 
-        stage('Publish Artifact') {
+        stage('Publish to Artifactory') {
             steps {
                 sh '''
-                curl -u admin:password -T ${ARTIFACT_NAME} \
-                "http://artifactory:8081/artifactory/sql-demo/${BUILD_NUMBER}/${ARTIFACT_NAME}"
+                curl -u $ARTIFACTORY_USER:$ARTIFACTORY_PASS \
+                    -T build/artifact.zip \
+                    "http://artifactory:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip"
                 '''
             }
         }
 
         stage('Deploy to Dev') {
-            when {
-                expression { env.BRANCH_NAME.startsWith("feature/") }
-            }
             steps {
                 sh '''
                 ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
-                -e "artifact_version=${BUILD_NUMBER}" --limit dev
+                    -e "artifact_url=http://artifactory:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
+                    --limit dev
                 '''
             }
         }
@@ -54,7 +67,7 @@ pipeline {
                 branch 'release'
             }
             steps {
-                input message: "Approve deployment to PROD?"
+                input message: "Deploy to Prod?", ok: "Approve"
             }
         }
 
@@ -65,7 +78,8 @@ pipeline {
             steps {
                 sh '''
                 ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
-                -e "artifact_version=${BUILD_NUMBER}" --limit prod
+                    -e "artifact_url=http://artifactory:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
+                    --limit prod
                 '''
             }
         }
