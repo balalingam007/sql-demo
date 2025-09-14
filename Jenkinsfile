@@ -47,7 +47,7 @@ pipeline {
                 sh '''
                 curl -u $ARTIFACTORY_USER:$ARTIFACTORY_PASS \
                     -T build/artifact.zip \
-                    "http://localhost:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip"
+                    "http://172.20.0.30:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip"
                 '''
             }
         }
@@ -56,7 +56,7 @@ pipeline {
             steps {
                 sh '''
                 ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
-                    -e "artifact_url=http://localhost:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
+                    -e "artifact_url=http://172.20.0.30:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
                     --limit dev
                 '''
             }
@@ -78,7 +78,7 @@ pipeline {
             steps {
                 sh '''
                 ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
-                    -e "artifact_url=http://localhost:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
+                    -e "artifact_url=http://172.20.0.30:8081/artifactory/libs-release-local/${REPO}/${BRANCH_NAME}/artifact.zip" \
                     --limit prod
                 '''
             }
