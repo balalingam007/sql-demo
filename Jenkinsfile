@@ -2,91 +2,72 @@ pipeline {
     agent any
 
     environment {
-        ARTIFACT_URL = "http://artifactory:8081/artifactory/generic-local/sql-demo/artifact.zip"
-        GIT_REPO     = "https://github.com/balalingam007/sql-demo.git"
+        ARTIFACT_NAME = "artifact.zip"
+        ARTIFACT_VERSION = "${env.BUILD_NUMBER}"
+        ARTIFACT_URL = "http://artifactory:8081/artifactory/sql-demo/${env.BUILD_NUMBER}/${ARTIFACT_NAME}"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: "${GIT_REPO}"
+                git branch: "${env.BRANCH_NAME}", url: 'https://github.com/balalingam007/sql-demo.git'
             }
         }
 
-        stage('Build') {
+        stage('Build & Package') {
             steps {
-                sh 'zip -r artifact.zip *.sql'
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'artifact.zip', fingerprint: true
-                }
+                sh 'zip -r ${ARTIFACT_NAME} src/*.js'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-        withSonarQubeEnv('sonarqube') {
-            script {
-                // Use the scanner installed via Jenkins "Global Tool Configuration"
-                def scannerHome = tool 'SonarQubeScanner'
-                sh """
-                  ${scannerHome}/bin/sonar-scanner \
-                  -Dsonar.projectKey=sql-demo \
-                  -Dsonar.sources=. \
-                  -Dsonar.host.url=${env.SONAR_HOST_URL} \
-                  -Dsonar.login=${env.SONAR_AUTH_TOKEN}
-                """
-            }
-        }
-    }
-}
-
-
-        stage('Publish Artifact') {
-            steps {
-                sh """
-                  curl -u admin:password -T artifact.zip \
-                  http://artifactory:8081/artifactory/generic-local/sql-demo/artifact.zip
-                """
-            }
-        }
-
-        stage('Deploy to Dev') {
-            steps {
-                sh """
-                  ansible-playbook -i /ansible/inventory /ansible/deploy.yml \
-                  -e artifact_url=${ARTIFACT_URL} \
-                  -e target_env=dev
-                """
-            }
-        }
-
-        stage('Approval for Prod') {
-            steps {
-                script {
-                    input message: "Approve deployment to PROD?", ok: "Deploy"
+                withSonarQubeEnv('MySonarQube') {
+                    sh 'sonar-scanner -Dsonar.projectKey=sql-demo -Dsonar.sources=src'
                 }
             }
         }
 
-        stage('Deploy to Prod') {
+        stage('Publish Artifact') {
             steps {
-                sh """
-                  ansible-playbook -i /ansible/inventory /ansible/deploy.yml \
-                  -e artifact_url=${ARTIFACT_URL} \
-                  -e target_env=prod
-                """
+                sh '''
+                curl -u admin:password -T ${ARTIFACT_NAME} \
+                "http://artifactory:8081/artifactory/sql-demo/${BUILD_NUMBER}/${ARTIFACT_NAME}"
+                '''
             }
         }
-    }
 
-    post {
-        success {
-            echo "✅ Pipeline completed successfully!"
+        stage('Deploy to Dev') {
+            when {
+                expression { env.BRANCH_NAME.startsWith("feature/") }
+            }
+            steps {
+                sh '''
+                ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
+                -e "artifact_version=${BUILD_NUMBER}" --limit dev
+                '''
+            }
         }
-        failure {
-            echo "❌ Pipeline failed. Please check logs."
+
+        stage('Approval for Prod') {
+            when {
+                branch 'release'
+            }
+            steps {
+                input message: "Approve deployment to PROD?"
+            }
+        }
+
+        stage('Deploy to Prod') {
+            when {
+                branch 'release'
+            }
+            steps {
+                sh '''
+                ansible-playbook -i /ansible/inventory.ini /ansible/deploy.yml \
+                -e "artifact_version=${BUILD_NUMBER}" --limit prod
+                '''
+            }
         }
     }
 }
